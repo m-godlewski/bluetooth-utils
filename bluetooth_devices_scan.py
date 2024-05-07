@@ -5,7 +5,7 @@ This script is used for scanning nearby bluetooth devices and retrieve GATT prof
 import argparse
 import json
 
-from bluepy.btle import Scanner, Peripheral, UUID
+from bluepy.btle import Scanner, Peripheral, UUID, ADDR_TYPE_RANDOM
 
 
 # time period that scanning will be performed
@@ -16,7 +16,7 @@ SCAN_TIME = 10
 parser = argparse.ArgumentParser()
 parser.add_argument("-m", "--mac_address", type=str, help="MAC address of device.")
 parser.add_argument(
-    "-d", "--dump", type=bool, help="Dumps device characteristic to JSON file."
+    "-d", "--dump", type=bool, help="Saves device GATT profile to JSON."
 )
 args = parser.parse_args()
 
@@ -33,15 +33,15 @@ def display_device_data(device: Peripheral) -> None:
     # list of device services
     for service in device.getServices():
         print(
-            "SERVICE UUID: {} COMMON NAME: [{}]".format(
+            "\tSERVICE UUID: {} COMMON NAME: [{}]".format(
                 service.uuid, UUID(service.uuid).getCommonName()
             )
         )
         # lists of service characteristics
-        print("\tCHARACTERISTICS:")
+        print("\t\tCHARACTERISTICS:")
         for characteristic in service.getCharacteristics():
             print(
-                "\t - UUID: {} HANDLE: {} (0x{}) - {} - [{}]".format(
+                "\t\t - UUID: {} HANDLE: {} (0x{}) - {} - [{}]".format(
                     characteristic.uuid,
                     characteristic.getHandle(),
                     characteristic.getHandle(),
@@ -53,7 +53,7 @@ def display_device_data(device: Peripheral) -> None:
     # list of device descriptors
     for descriptor in device.getDescriptors():
         print(
-            "DESCRIPTORS: {}, [{}], Handle: {}".format(
+            "\tDESCRIPTORS: {}, [{}], Handle: {}".format(
                 descriptor.uuid,
                 UUID(descriptor.uuid).getCommonName(),
                 descriptor.handle,
@@ -63,7 +63,7 @@ def display_device_data(device: Peripheral) -> None:
     # list of device characteristics
     for characteristic in device.getCharacteristics():
         print(
-            "DEVICE CHARACTERISTIC: {} [{}] (0x{}), {}, Value: {}".format(
+            "\tDEVICE CHARACTERISTIC: {} [{}] (0x{}), {}, Value: {}".format(
                 characteristic.uuid,
                 characteristic.getHandle(),
                 characteristic.getHandle(),
@@ -105,46 +105,42 @@ def dump_profile_to_json(device: Peripheral, mac_address: str) -> bool:
         return True
 
 
-def scan_for_devices() -> list:
-    """Scan for nearby bluetooth devices and returns their data as list."""
-    devices = Scanner().scan(SCAN_TIME)
-    print(f"Number of devices found = {len(devices)}")
-    for device in devices:
-        print(f"Device {device.addr} RSSI={device.rssi} dB")
-        for _, desc, value in device.getScanData():
-            print(f"\t{desc} = {value}")
-    return devices
-
-
 # main section
 if __name__ == "__main__":
-    # scans for nearby bluetooth devices
-    display_header("Scan Results")
-    devices_data = scan_for_devices()
+
+    # scan for nearby bluetooth devices
+    devices = Scanner().scan(SCAN_TIME)
 
     # if mac address has been specified retrieve bluetooth characteristic only from selected device
     if args.mac_address:
         display_header(text=f"Device '{args.mac_address}'")
+        print("DEVICE GATT PROFILE:")
         try:
-            device = Peripheral(args.mac_address)
+            peripheral = Peripheral(args.mac_address)
         except Exception as e:
-            print(e)
+            print(f"\t{e}")
             pass
         else:
-            display_device_data(device)
+            display_device_data(peripheral)
             if args.dump:
-                dump_profile_to_json(device=device, mac_address=args.mac_address)
+                dump_profile_to_json(device=peripheral, mac_address=args.mac_address)
 
     # otherwise, retrieve characteristic for each found device
     else:
-        for device_data in devices_data:
-            display_header(text=f"Device '{device_data.addr}'")
+        # iterate over detected devices
+        for device in devices:
+            display_header(text=f"Device '{device.addr}'")
+            print("DEVICE METADATA:")
+            print(f"\tRSSI = {device.rssi} dB")
+            for _, desc, value in device.getScanData():
+                print(f"\t{desc} = {value}")
+            print("DEVICE GATT PROFILE:")
             try:
-                device = Peripheral(device_data.addr)
+                peripheral = Peripheral(device.addr)
             except Exception as e:
-                print(e)
+                print(f"\t{e}")
                 pass
             else:
-                display_device_data(device)
+                display_device_data(peripheral)
                 if args.dump:
-                    dump_profile_to_json(device=device, mac_address=device_data.addr)
+                    dump_profile_to_json(device=peripheral, mac_address=device.addr)
